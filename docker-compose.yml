@@ -1,0 +1,35 @@
+services:
+  # Frontend React App
+  frontend:
+    build:
+      context: .
+    ports:
+      - "80:80"
+    depends_on:
+      - oracle-db
+    networks:
+      - prisoner-network
+
+  # Oracle DB - using Container Registry Oracle Database image
+  # Note: In a real project, you would need to sign up for access to the Oracle Container Registry
+  # and accept their terms and conditions
+  oracle-db:
+    image: container-registry.oracle.com/database/express:latest
+    environment:
+      - ORACLE_PWD=YourStrongPassword123
+      - ORACLE_CHARACTERSET=AL32UTF8
+    ports:
+      - "1521:1521"
+      - "5500:5500"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./init-scripts:/opt/oracle/scripts/setup
+    networks:
+      - prisoner-network
+
+networks:
+  prisoner-network:
+    driver: bridge
+
+volumes:
+  oracle-data: 
