@@ -2,11 +2,29 @@ services:
   # Frontend React App
   frontend:
     build:
-      context: .
+      context: ./frontend
     ports:
       - "80:80"
     depends_on:
+      - backend
       - oracle-db
+    networks:
+      - prisoner-network
+
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "4000:4000"
+    depends_on:
+      - oracle-db
+    environment:
+      - PORT=4000
+      - DB_HOST=oracle-db
+      - DB_PORT=1521
+      - DB_USER=system
+      - DB_PASSWORD=YourStrongPassword123
     networks:
       - prisoner-network
 
