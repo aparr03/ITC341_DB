@@ -23,8 +23,7 @@ A simple React application for managing a prisoner database using Oracle DB.
 ```bash
 docker-compose up -d
 ```
-
-The application will be available at http://localhost
+Access Localhost
 
 ## Development
 
@@ -40,26 +39,11 @@ npm install
 3. Start the development server:
 
 ```bash
+cd backend
 npm start
 ```
 
 The development server will be available at http://localhost:3000
-
-## Project Structure
-
-```
-/
-├── public/                  # Static files
-├── src/                     # React source code
-│   ├── api/                 # API service layer
-│   ├── App.js               # Main application component
-│   ├── App.css              # Application styles
-│   └── index.js             # Entry point
-├── nginx/                   # Nginx configuration
-├── init-scripts/            # Oracle DB initialization scripts
-├── Dockerfile               # Docker configuration for React app
-└── docker-compose.yml       # Docker Compose configuration
-```
 
 ## Notes
 
