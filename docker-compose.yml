@@ -18,36 +18,60 @@ services:
     ports:
       - "4000:4000"
     depends_on:
-      - oracle-db
+      oracle-db:
+        condition: service_healthy
     environment:
       - PORT=4000
       - DB_HOST=oracle-db
       - DB_PORT=1521
       - DB_USER=system
-      - DB_PASSWORD=YourStrongPassword123
+      - DB_PASSWORD=ITC341ProjectPassword
+      - DB_DATABASE=xepdb1
+    volumes:
+      - ./init-scripts:/app/init-scripts
     networks:
       - prisoner-network
+    restart: on-failure
 
-  # Oracle DB - using Container Registry Oracle Database image
-  # Note: In a real project, you would need to sign up for access to the Oracle Container Registry
-  # and accept their terms and conditions
+  # Oracle DB - using publicly available Oracle XE image
   oracle-db:
-    image: container-registry.oracle.com/database/express:latest
+    image: gvenzl/oracle-xe:21-slim
     environment:
-      - ORACLE_PWD=YourStrongPassword123
-      - ORACLE_CHARACTERSET=AL32UTF8
+      - ORACLE_PASSWORD=ITC341ProjectPassword
+      - ORACLE_DATABASE=XE
+      # Ensure data persistence
+      - ORACLE_CHARSET=AL32UTF8
+      - ORACLE_EDITION=xe
+      # For easier debugging
+      - ORACLE_DISABLE_ASYNCH_IO=true
     ports:
       - "1521:1521"
       - "5500:5500"
     volumes:
       - oracle-data:/opt/oracle/oradata
-      - ./init-scripts:/opt/oracle/scripts/setup
+      - oracle-setup:/opt/oracle/scripts/setup
+      - oracle-startup:/opt/oracle/scripts/startup
+      - ./init-scripts:/container-entrypoint-initdb.d
     networks:
       - prisoner-network
+    healthcheck:
+      # Improved healthcheck to verify database is actually accessible
+      test: [ "CMD", "sqlplus", "-L", "system/ITC341ProjectPassword@//localhost:1521/xepdb1", "AS", "SYSDBA", "<<< 'SELECT 1 FROM DUAL;'" ]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    # Improve container shutdown to prevent data corruption
+    stop_grace_period: 30s
 
 networks:
   prisoner-network:
     driver: bridge
 
 volumes:
-  oracle-data: 
+  oracle-data:
+    name: oracle-prison-data
+  oracle-setup:
+    name: oracle-prison-setup
+  oracle-startup:
+    name: oracle-prison-startup 
