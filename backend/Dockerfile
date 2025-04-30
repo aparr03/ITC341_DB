@@ -1,32 +1,33 @@
-FROM node:16
+FROM node:18-slim
 
-# Install Oracle Instant Client
-RUN apt-get update && apt-get install -y libaio1 wget unzip \
-    && mkdir -p /opt/oracle \
-    && cd /opt/oracle \
-    && wget https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linuxx64.zip \
-    && unzip instantclient-basiclite-linuxx64.zip \
-    && rm -f instantclient-basiclite-linuxx64.zip \
-    && cd /opt/oracle/instantclient* \
-    && rm -f *jdbc* *occi* *mysql* *README *jar uidrvci genezi adrci \
-    && echo /opt/oracle/instantclient* > /etc/ld.so.conf.d/oracle-instantclient.conf \
-    && ldconfig
-
-# Create app directory
 WORKDIR /app
 
-# Install app dependencies
+# Install Oracle Instant Client
+RUN apt-get update && apt-get install -y \
+    libaio1 \
+    wget \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Oracle Instant Client
+WORKDIR /opt/oracle
+RUN wget https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linuxx64.zip \
+    && unzip instantclient-basiclite-linuxx64.zip \
+    && rm instantclient-basiclite-linuxx64.zip \
+    && cd /opt/oracle/instantclient* \
+    && ln -s libclntsh.so.21.1 libclntsh.so \
+    && ln -s libocci.so.21.1 libocci.so
+
+ENV LD_LIBRARY_PATH="/opt/oracle/instantclient_21_11:${LD_LIBRARY_PATH}"
+
+WORKDIR /app
+
 COPY package*.json ./
+
 RUN npm install
 
-# Copy app source code
 COPY . .
 
-# Set environment variables for Oracle Instant Client
-ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_21_10
+EXPOSE 3000
 
-# Expose API port
-EXPOSE 4000
-
-# Start the app
-CMD ["npm", "start"] 
+CMD ["node", "api/index.js"] 

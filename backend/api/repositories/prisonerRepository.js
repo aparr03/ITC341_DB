@@ -6,296 +6,207 @@
  * as well as more advanced operations like filtering and searching.
  */
 
-const db = require('../db');
-const { Prisoner } = require('../models');
+const { execute } = require('../db');
 const oracledb = require('oracledb');
 
-/**
- * Get all prisoners from the database
- * @returns {Promise<Array>} Array of Prisoner objects
- */
-async function getAllPrisoners() {
-  const sql = `
-    SELECT *
-    FROM Prisoner
-    ORDER BY prisoner_id
-  `;
-  
-  try {
-    const result = await db.execute(sql);
-    return result.rows.map(row => mapToPrisoner(row));
-  } catch (err) {
-    console.error('Error in getAllPrisoners:', err);
-    throw err;
-  }
-}
-
-/**
- * Get a prisoner by ID
- * @param {number} id - Prisoner ID
- * @returns {Promise<Object|null>} Prisoner object or null if not found
- */
-async function getPrisonerById(id) {
-  const sql = `
-    SELECT *
-    FROM Prisoner
-    WHERE prisoner_id = :id
-  `;
-  
-  try {
-    const result = await db.execute(sql, { id });
-    if (result.rows.length === 0) {
-      return null;
+class PrisonerRepository {
+  static async getAll() {
+    console.log('PrisonerRepository: Executing getAll query...');
+    const sql = `
+      SELECT 
+        p.prisoner_id,
+        p.fName, 
+        p.lName,
+        p.date_of_birth,
+        p.gender,
+        p.offense,
+        p.sentence,
+        p.admission_date,
+        p.release_date,
+        p.behavior_rating,
+        p.parole_status,
+        p.cellblock_id,
+        cb.cellblock_name
+      FROM Prisoner p
+      LEFT JOIN Cell_Block cb ON p.cellblock_id = cb.cellblock_id
+      ORDER BY p.prisoner_id
+    `;
+    console.log('SQL Query:', sql);
+    const result = await execute(sql);
+    console.log(`PrisonerRepository: Retrieved ${result.rows.length} rows`);
+    
+    if (result.rows.length > 0) {
+      // Process the rows to ensure consistent uppercase keys
+      const processedRows = result.rows.map(row => {
+        const newRow = {};
+        // Map each key to its uppercase version
+        newRow.PRISONER_ID = row.PRISONER_ID;
+        newRow.FNAME = row.FNAME;
+        newRow.LNAME = row.LNAME;
+        newRow.DATE_OF_BIRTH = row.DATE_OF_BIRTH;
+        newRow.GENDER = row.GENDER;
+        newRow.OFFENSE = row.OFFENSE;
+        newRow.SENTENCE = row.SENTENCE;
+        newRow.ADMISSION_DATE = row.ADMISSION_DATE;
+        newRow.RELEASE_DATE = row.RELEASE_DATE;
+        newRow.BEHAVIOR_RATING = row.BEHAVIOR_RATING;
+        newRow.PAROLE_STATUS = row.PAROLE_STATUS;
+        newRow.CELLBLOCK_ID = row.CELLBLOCK_ID;
+        newRow.CELLBLOCK_NAME = row.CELLBLOCK_NAME;
+        
+        return newRow;
+      });
+      
+      console.log('Processed data sample:', JSON.stringify(processedRows[0], null, 2));
+      return processedRows;
     }
     
-    return mapToPrisoner(result.rows[0]);
-  } catch (err) {
-    console.error(`Error in getPrisonerById for id ${id}:`, err);
-    throw err;
+    return result.rows;
   }
-}
 
-/**
- * Add a new prisoner to the database
- * @param {Object} prisoner - Prisoner data
- * @returns {Promise<Object>} Created prisoner with ID
- */
-async function addPrisoner(prisoner) {
-  // Get next value from sequence
-  const seqSql = `SELECT prisoner_id_seq.NEXTVAL FROM DUAL`;
-  const seqResult = await db.execute(seqSql);
-  const prisonerId = seqResult.rows[0].NEXTVAL;
-  
-  const sql = `
-    INSERT INTO Prisoner (
-      prisoner_id, cellblock_id, fName, lName, date_of_birth, Gender, 
-      offense, sentence, admission_date, release_date, behavior_rating, parole_status
-    ) VALUES (
-      :prisoner_id, :cellblock_id, :fName, :lName, TO_DATE(:date_of_birth, 'YYYY-MM-DD'), 
-      :gender, :offense, :sentence, 
-      TO_TIMESTAMP(:admission_date, 'YYYY-MM-DD HH24:MI:SS'), 
-      TO_TIMESTAMP(:release_date, 'YYYY-MM-DD HH24:MI:SS'), 
-      :behavior_rating, :parole_status
-    )
-  `;
-  
-  try {
-    // Format dates for Oracle
-    const admissionDate = formatDateForOracle(prisoner.admission_date);
-    const releaseDate = formatDateForOracle(prisoner.release_date);
+  static async getById(prisonerId) {
+    console.log(`PrisonerRepository: Getting prisoner with ID ${prisonerId}`);
+    const sql = `
+      SELECT 
+        p.prisoner_id,
+        p.fName, 
+        p.lName,
+        p.date_of_birth,
+        p.gender,
+        p.offense,
+        p.sentence,
+        p.admission_date,
+        p.release_date,
+        p.behavior_rating,
+        p.parole_status,
+        p.cellblock_id,
+        cb.cellblock_name
+      FROM Prisoner p
+      LEFT JOIN Cell_Block cb ON p.cellblock_id = cb.cellblock_id
+      WHERE p.prisoner_id = :prisonerId
+    `;
+    console.log('SQL Query:', sql);
+    console.log('Parameters:', { prisonerId });
+    const result = await execute(sql, { prisonerId });
     
-    const binds = {
-      prisoner_id: prisonerId,
-      cellblock_id: prisoner.cellblock_id,
-      fName: prisoner.fName,
-      lName: prisoner.lName,
-      date_of_birth: prisoner.date_of_birth,
-      gender: prisoner.gender,
-      offense: prisoner.offense,
-      sentence: prisoner.sentence,
-      admission_date: admissionDate,
-      release_date: releaseDate,
-      behavior_rating: prisoner.behavior_rating,
-      parole_status: prisoner.parole_status
-    };
-    
-    // Force autoCommit to true to ensure changes are persisted
-    await db.execute(sql, binds, { autoCommit: true });
-    
-    console.log(`Prisoner with ID ${prisonerId} added and committed to database`);
-    
-    // Set the generated ID on the prisoner object
-    prisoner.prisoner_id = prisonerId;
-    return prisoner;
-  } catch (err) {
-    console.error('Error in addPrisoner:', err);
-    throw err;
-  }
-}
-
-/**
- * Update an existing prisoner
- * @param {number} id - Prisoner ID 
- * @param {Object} prisoner - Updated prisoner data
- * @returns {Promise<Object>} Updated prisoner
- */
-async function updatePrisoner(id, prisoner) {
-  const sql = `
-    UPDATE Prisoner SET
-      cellblock_id = :cellblock_id,
-      fName = :fName,
-      lName = :lName,
-      date_of_birth = TO_DATE(:date_of_birth, 'YYYY-MM-DD'),
-      Gender = :gender,
-      offense = :offense,
-      sentence = :sentence,
-      admission_date = TO_TIMESTAMP(:admission_date, 'YYYY-MM-DD HH24:MI:SS'),
-      release_date = TO_TIMESTAMP(:release_date, 'YYYY-MM-DD HH24:MI:SS'),
-      behavior_rating = :behavior_rating,
-      parole_status = :parole_status
-    WHERE prisoner_id = :prisoner_id
-  `;
-  
-  try {
-    // Format dates for Oracle
-    const admissionDate = formatDateForOracle(prisoner.admission_date);
-    const releaseDate = formatDateForOracle(prisoner.release_date);
-    
-    const binds = {
-      prisoner_id: id,
-      cellblock_id: prisoner.cellblock_id,
-      fName: prisoner.fName,
-      lName: prisoner.lName,
-      date_of_birth: prisoner.date_of_birth,
-      gender: prisoner.gender,
-      offense: prisoner.offense,
-      sentence: prisoner.sentence,
-      admission_date: admissionDate,
-      release_date: releaseDate,
-      behavior_rating: prisoner.behavior_rating,
-      parole_status: prisoner.parole_status
-    };
-    
-    // Force autoCommit to true to ensure changes are persisted
-    const result = await db.execute(sql, binds, { autoCommit: true });
-    
-    console.log(`Prisoner with ID ${id} updated and committed to database`);
-    
-    if (result.rowsAffected === 0) {
-      throw new Error(`Prisoner with ID ${id} not found`);
+    if (result.rows.length > 0) {
+      // Process the row to ensure consistent uppercase keys
+      const row = result.rows[0];
+      const processedRow = {};
+      
+      // Map each key to its uppercase version
+      processedRow.PRISONER_ID = row.PRISONER_ID;
+      processedRow.FNAME = row.FNAME;
+      processedRow.LNAME = row.LNAME;
+      processedRow.DATE_OF_BIRTH = row.DATE_OF_BIRTH;
+      processedRow.GENDER = row.GENDER;
+      processedRow.OFFENSE = row.OFFENSE;
+      processedRow.SENTENCE = row.SENTENCE;
+      processedRow.ADMISSION_DATE = row.ADMISSION_DATE;
+      processedRow.RELEASE_DATE = row.RELEASE_DATE;
+      processedRow.BEHAVIOR_RATING = row.BEHAVIOR_RATING;
+      processedRow.PAROLE_STATUS = row.PAROLE_STATUS;
+      processedRow.CELLBLOCK_ID = row.CELLBLOCK_ID;
+      processedRow.CELLBLOCK_NAME = row.CELLBLOCK_NAME;
+      
+      console.log('Processed row data:', JSON.stringify(processedRow, null, 2));
+      return processedRow;
     }
     
-    // Set the ID on the prisoner object
-    prisoner.prisoner_id = parseInt(id);
-    return prisoner;
-  } catch (err) {
-    console.error(`Error in updatePrisoner for id ${id}:`, err);
-    throw err;
+    console.log('Query result: No prisoner found');
+    return null;
   }
-}
 
-/**
- * Delete a prisoner
- * @param {number} id - Prisoner ID
- * @returns {Promise<Object>} Object containing the deleted ID
- */
-async function deletePrisoner(id) {
-  const sql = `
-    DELETE FROM Prisoner
-    WHERE prisoner_id = :id
-  `;
-  
-  try {
-    // Force autoCommit to true to ensure changes are persisted
-    const result = await db.execute(sql, { id }, { autoCommit: true });
-    
-    console.log(`Prisoner with ID ${id} deleted and committed to database`);
-    
-    if (result.rowsAffected === 0) {
-      throw new Error(`Prisoner with ID ${id} not found`);
+  static async create(prisoner) {
+    try {
+      console.log('PrisonerRepository: Creating new prisoner');
+      console.log('Input data:', prisoner);
+      
+      const sql = `
+        INSERT INTO Prisoner (
+          prisoner_id, cellblock_id, fName, lName, date_of_birth, 
+          gender, offense, sentence, admission_date, release_date, 
+          behavior_rating, parole_status
+        ) VALUES (
+          prisoner_id_seq.NEXTVAL, :cellblock_id, :fName, :lName, 
+          TO_DATE(:date_of_birth, 'YYYY-MM-DD'), :gender, :offense, 
+          :sentence, TO_DATE(:admission_date, 'YYYY-MM-DD'), 
+          TO_DATE(:release_date, 'YYYY-MM-DD'), :behavior_rating, 
+          :parole_status
+        )
+        RETURNING prisoner_id INTO :outId
+      `;
+      
+      console.log('SQL Query:', sql);
+      
+      const binds = {
+        cellblock_id: prisoner.cellblock_id,
+        fName: prisoner.fName,
+        lName: prisoner.lName,
+        date_of_birth: prisoner.date_of_birth,
+        gender: prisoner.gender,
+        offense: prisoner.offense,
+        sentence: prisoner.sentence,
+        admission_date: prisoner.admission_date,
+        release_date: prisoner.release_date,
+        behavior_rating: prisoner.behavior_rating,
+        parole_status: prisoner.parole_status,
+        outId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
+      };
+      
+      console.log('Bind parameters:', binds);
+      
+      const result = await execute(sql, binds);
+      console.log('Insert result:', result);
+      console.log('New prisoner ID:', result.outBinds.outId[0]);
+      
+      return result.outBinds.outId[0];
+    } catch (error) {
+      console.error('PrisonerRepository: Error in create:', error);
+      console.error('SQL Error Code:', error.errorNum);
+      console.error('SQL Error Message:', error.message);
+      throw error;
     }
+  }
+
+  static async update(prisonerId, prisoner) {
+    console.log(`PrisonerRepository: Updating prisoner ${prisonerId}`);
+    console.log('Update data:', prisoner);
     
-    return { prisoner_id: parseInt(id) };
-  } catch (err) {
-    console.error(`Error in deletePrisoner for id ${id}:`, err);
-    throw err;
+    const sql = `
+      UPDATE Prisoner
+      SET 
+        cellblock_id = :cellblock_id,
+        fName = :fName,
+        lName = :lName,
+        date_of_birth = TO_DATE(:date_of_birth, 'YYYY-MM-DD'),
+        gender = :gender,
+        offense = :offense,
+        sentence = :sentence,
+        admission_date = TO_DATE(:admission_date, 'YYYY-MM-DD'),
+        release_date = TO_DATE(:release_date, 'YYYY-MM-DD'),
+        behavior_rating = :behavior_rating,
+        parole_status = :parole_status
+      WHERE prisoner_id = :prisonerId
+    `;
+    
+    console.log('SQL Query:', sql);
+    console.log('Parameters:', { ...prisoner, prisonerId });
+    
+    const result = await execute(sql, { ...prisoner, prisonerId });
+    console.log('Update result:', result);
+    return prisonerId;
+  }
+
+  static async delete(prisonerId) {
+    console.log(`PrisonerRepository: Deleting prisoner ${prisonerId}`);
+    const sql = 'DELETE FROM Prisoner WHERE prisoner_id = :prisonerId';
+    console.log('SQL Query:', sql);
+    console.log('Parameters:', { prisonerId });
+    const result = await execute(sql, { prisonerId });
+    console.log('Delete result:', result);
+    return prisonerId;
   }
 }
 
-/**
- * Search for prisoners based on criteria
- * @param {Object} criteria - Search criteria
- * @returns {Promise<Array>} Array of matching Prisoner objects
- */
-async function searchPrisoners(criteria) {
-  let sql = `
-    SELECT *
-    FROM Prisoner
-    WHERE 1=1
-  `;
-  
-  const binds = {};
-  
-  if (criteria.name) {
-    sql += ` AND (UPPER(fName) LIKE UPPER('%' || :name || '%') OR UPPER(lName) LIKE UPPER('%' || :name || '%'))`;
-    binds.name = criteria.name;
-  }
-  
-  if (criteria.cellblock_id) {
-    sql += ` AND cellblock_id = :cellblock_id`;
-    binds.cellblock_id = criteria.cellblock_id;
-  }
-  
-  if (criteria.offense) {
-    sql += ` AND UPPER(offense) LIKE UPPER('%' || :offense || '%')`;
-    binds.offense = criteria.offense;
-  }
-  
-  if (criteria.parole_status) {
-    sql += ` AND UPPER(parole_status) = UPPER(:parole_status)`;
-    binds.parole_status = criteria.parole_status;
-  }
-  
-  sql += ` ORDER BY prisoner_id`;
-  
-  try {
-    const result = await db.execute(sql, binds);
-    return result.rows.map(row => mapToPrisoner(row));
-  } catch (err) {
-    console.error('Error in searchPrisoners:', err);
-    throw err;
-  }
-}
-
-/**
- * Helper function to map database row to Prisoner object
- * @param {Object} row - Database row
- * @returns {Object} Prisoner object
- */
-function mapToPrisoner(row) {
-  return new Prisoner({
-    prisoner_id: row.PRISONER_ID,
-    cellblock_id: row.CELLBLOCK_ID,
-    fName: row.FNAME,
-    lName: row.LNAME,
-    date_of_birth: row.DATE_OF_BIRTH ? new Date(row.DATE_OF_BIRTH).toISOString().split('T')[0] : null,
-    gender: row.GENDER,
-    offense: row.OFFENSE,
-    sentence: row.SENTENCE,
-    admission_date: row.ADMISSION_DATE ? new Date(row.ADMISSION_DATE).toISOString() : null,
-    release_date: row.RELEASE_DATE ? new Date(row.RELEASE_DATE).toISOString() : null,
-    behavior_rating: row.BEHAVIOR_RATING,
-    parole_status: row.PAROLE_STATUS
-  });
-}
-
-/**
- * Format a date for Oracle
- * @param {string} dateString - Date string from API
- * @returns {string} Formatted date string
- */
-function formatDateForOracle(dateString) {
-  if (!dateString) return null;
-  
-  // If it's just a date without time, add default time
-  if (dateString.length === 10) { // YYYY-MM-DD
-    return dateString + ' 00:00:00';
-  }
-  
-  // Try to format ISO date string to Oracle format
-  try {
-    const date = new Date(dateString);
-    return date.toISOString().replace('T', ' ').split('.')[0];
-  } catch (e) {
-    return dateString;
-  }
-}
-
-module.exports = {
-  getAllPrisoners,
-  getPrisonerById,
-  addPrisoner,
-  updatePrisoner,
-  deletePrisoner,
-  searchPrisoners
-}; 
+module.exports = PrisonerRepository; 

@@ -23,10 +23,10 @@ oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
 const dbConfig = {
   user: process.env.DB_USER || 'system',
   password: process.env.DB_PASSWORD || 'ITC341ProjectPassword',
-  connectString: `${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '1521'}/${process.env.DB_DATABASE || 'XE'}`
+  connectString: `${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '1522'}/${process.env.DB_DATABASE || 'xepdb1'}`
 };
 
-console.log('Oracle connection string:', `${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_DATABASE}`);
+console.log('Oracle connection string:', dbConfig.connectString);
 
 // Check if Oracle Instant Client is in the expected location
 function checkInstantClient() {

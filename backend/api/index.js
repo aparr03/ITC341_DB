@@ -9,37 +9,39 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const { initialize, close } = require('./db');
+const PrisonerService = require('./prisonerService');
 
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-// Database connection
-const db = require('./db');
-
-// Repositories
-const prisonerRepository = require('./repositories/prisonerRepository');
-const cellBlockRepository = require('./repositories/cellBlockRepository');
-const cellRepository = require('./repositories/cellRepository');
-const paroleRepository = require('./repositories/paroleRepository');
-
-// Demonstration queries
-const queries = require('./queries');
-
 // Create Express app
 const app = express();
 
-// Middleware
-app.use(cors());
+// Configure CORS
+const corsOptions = {
+  origin: ['http://localhost', 'http://localhost:80', 'http://localhost:3001'],
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true,
+  optionsSuccessStatus: 204
+};
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Log all incoming requests
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  next();
+});
 
 // Initialize database connection on startup
 async function initializeApp() {
   try {
-    await db.initialize();
+    await initialize();
     console.log('Database connection initialized successfully');
     
     // Start listening for requests once database is connected
-    const PORT = process.env.PORT || 4000;
+    const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
       console.log(`Prison Management API running on port ${PORT}`);
     });
@@ -52,7 +54,7 @@ async function initializeApp() {
 // Graceful shutdown handling
 process.on('SIGINT', async () => {
   try {
-    await db.close();
+    await close();
     console.log('Database connection closed');
     process.exit(0);
   } catch (err) {
@@ -61,190 +63,123 @@ process.on('SIGINT', async () => {
   }
 });
 
-// API Routes
+// Health check endpoint
+app.get('/up', (req, res) => {
+  res.status(200).send('OK');
+});
+
+// Initialize database connection for each request
+app.use(async (req, res, next) => {
+  try {
+    await initialize();
+    next();
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    res.status(500).json({ error: 'Database connection failed' });
+  }
+});
 
 // Prisoner routes
 app.get('/api/prisoners', async (req, res) => {
   try {
-    const search = req.query.search;
+    console.log('GET /api/prisoners - Fetching all prisoners');
+    const prisoners = await PrisonerService.getAllPrisoners();
+    console.log('Prisoners fetched. Count:', prisoners.length);
     
-    // If search query is provided, use search function
-    if (search) {
-      const criteria = {};
+    if (prisoners.length > 0) {
+      console.log('First prisoner record keys:', Object.keys(prisoners[0]));
+      console.log('First prisoner record:', JSON.stringify(prisoners[0], null, 2));
       
-      if (search.name) criteria.name = search.name;
-      if (search.cellblock_id) criteria.cellblock_id = search.cellblock_id;
-      if (search.offense) criteria.offense = search.offense;
-      if (search.parole_status) criteria.parole_status = search.parole_status;
-      
-      const prisoners = await prisonerRepository.searchPrisoners(criteria);
-      return res.json(prisoners);
+      // Check for null or undefined values in the first record
+      const firstPrisoner = prisoners[0];
+      Object.keys(firstPrisoner).forEach(key => {
+        if (firstPrisoner[key] === null || firstPrisoner[key] === undefined) {
+          console.log(`WARNING: ${key} is ${firstPrisoner[key]}`);
+        }
+      });
     }
     
-    // Otherwise get all
-    const prisoners = await prisonerRepository.getAllPrisoners();
     res.json(prisoners);
-  } catch (err) {
-    console.error('Error getting prisoners:', err);
-    res.status(500).json({ error: 'Failed to retrieve prisoners', details: err.message });
+  } catch (error) {
+    console.error('Error getting prisoners:', error);
+    res.status(500).json({ error: 'Failed to get prisoners' });
   }
 });
 
 app.get('/api/prisoners/:id', async (req, res) => {
   try {
-    const prisoner = await prisonerRepository.getPrisonerById(req.params.id);
-    
+    const prisoner = await PrisonerService.getPrisonerById(req.params.id);
     if (!prisoner) {
       return res.status(404).json({ error: 'Prisoner not found' });
     }
-    
     res.json(prisoner);
-  } catch (err) {
-    console.error(`Error getting prisoner ${req.params.id}:`, err);
-    res.status(500).json({ error: 'Failed to retrieve prisoner', details: err.message });
+  } catch (error) {
+    console.error(`Error getting prisoner ${req.params.id}:`, error);
+    res.status(500).json({ error: 'Failed to get prisoner' });
   }
 });
 
 app.post('/api/prisoners', async (req, res) => {
   try {
-    const prisoner = await prisonerRepository.addPrisoner(req.body);
+    console.log('POST /api/prisoners - Creating new prisoner with data:', req.body);
+    const prisoner = await PrisonerService.createPrisoner(req.body);
+    console.log('Prisoner created:', prisoner);
     res.status(201).json(prisoner);
-  } catch (err) {
-    console.error('Error adding prisoner:', err);
-    res.status(500).json({ error: 'Failed to add prisoner', details: err.message });
+  } catch (error) {
+    console.error('Error creating prisoner:', error);
+    res.status(500).json({ error: 'Failed to create prisoner', details: error.message });
   }
 });
 
 app.put('/api/prisoners/:id', async (req, res) => {
   try {
-    const prisoner = await prisonerRepository.updatePrisoner(req.params.id, req.body);
+    const prisoner = await PrisonerService.updatePrisoner(req.params.id, req.body);
     res.json(prisoner);
-  } catch (err) {
-    console.error(`Error updating prisoner ${req.params.id}:`, err);
-    res.status(500).json({ error: 'Failed to update prisoner', details: err.message });
+  } catch (error) {
+    console.error(`Error updating prisoner ${req.params.id}:`, error);
+    res.status(500).json({ error: 'Failed to update prisoner' });
   }
 });
 
 app.delete('/api/prisoners/:id', async (req, res) => {
   try {
-    await prisonerRepository.deletePrisoner(req.params.id);
+    await PrisonerService.deletePrisoner(req.params.id);
     res.status(204).send();
-  } catch (err) {
-    console.error(`Error deleting prisoner ${req.params.id}:`, err);
-    res.status(500).json({ error: 'Failed to delete prisoner', details: err.message });
+  } catch (error) {
+    console.error(`Error deleting prisoner ${req.params.id}:`, error);
+    res.status(500).json({ error: 'Failed to delete prisoner' });
   }
 });
 
-// Cell Block routes
-app.get('/api/cellblocks', async (req, res) => {
+// Also keep the original routes without /api prefix for backward compatibility
+app.get('/prisoners', async (req, res) => {
   try {
-    const cellBlocks = await cellBlockRepository.getAllCellBlocks();
-    res.json(cellBlocks);
-  } catch (err) {
-    console.error('Error getting cell blocks:', err);
-    res.status(500).json({ error: 'Failed to retrieve cell blocks', details: err.message });
+    const prisoners = await PrisonerService.getAllPrisoners();
+    res.json(prisoners);
+  } catch (error) {
+    console.error('Error getting prisoners:', error);
+    res.status(500).json({ error: 'Failed to get prisoners' });
   }
 });
 
-app.get('/api/cellblocks/:id', async (req, res) => {
+app.post('/prisoners', async (req, res) => {
   try {
-    const cellBlock = await cellBlockRepository.getCellBlockById(req.params.id);
-    
-    if (!cellBlock) {
-      return res.status(404).json({ error: 'Cell block not found' });
-    }
-    
-    res.json(cellBlock);
-  } catch (err) {
-    console.error(`Error getting cell block ${req.params.id}:`, err);
-    res.status(500).json({ error: 'Failed to retrieve cell block', details: err.message });
+    const prisoner = await PrisonerService.createPrisoner(req.body);
+    res.status(201).json(prisoner);
+  } catch (error) {
+    console.error('Error creating prisoner:', error);
+    res.status(500).json({ error: 'Failed to create prisoner' });
   }
 });
 
-// Cell routes
-app.get('/api/cells', async (req, res) => {
+// Cleanup database connection after each request
+app.use(async (req, res, next) => {
   try {
-    const cellblockId = req.query.cellblock_id;
-    
-    if (cellblockId) {
-      const cells = await cellRepository.getCellsByCellBlockId(cellblockId);
-      return res.json(cells);
-    }
-    
-    const cells = await cellRepository.getAllCells();
-    res.json(cells);
-  } catch (err) {
-    console.error('Error getting cells:', err);
-    res.status(500).json({ error: 'Failed to retrieve cells', details: err.message });
-  }
-});
-
-// Parole routes
-app.get('/api/paroles', async (req, res) => {
-  try {
-    const prisonerId = req.query.prisoner_id;
-    
-    if (prisonerId) {
-      const paroles = await paroleRepository.getParolesByPrisonerId(prisonerId);
-      return res.json(paroles);
-    }
-    
-    const paroles = await paroleRepository.getAllParoles();
-    res.json(paroles);
-  } catch (err) {
-    console.error('Error getting parole records:', err);
-    res.status(500).json({ error: 'Failed to retrieve parole records', details: err.message });
-  }
-});
-
-// Demonstration Query Routes
-app.get('/api/reports/occupancy', async (req, res) => {
-  try {
-    const data = await queries.getOccupancyByBlock();
-    res.json(data);
-  } catch (err) {
-    console.error('Error running occupancy report:', err);
-    res.status(500).json({ error: 'Failed to retrieve occupancy data', details: err.message });
-  }
-});
-
-app.get('/api/reports/parole-eligibility', async (req, res) => {
-  try {
-    const data = await queries.getUpcomingParoleEligibility();
-    res.json(data);
-  } catch (err) {
-    console.error('Error running parole eligibility report:', err);
-    res.status(500).json({ error: 'Failed to retrieve parole eligibility data', details: err.message });
-  }
-});
-
-app.get('/api/reports/offense-statistics', async (req, res) => {
-  try {
-    const data = await queries.getOffenseStatistics();
-    res.json(data);
-  } catch (err) {
-    console.error('Error running offense statistics report:', err);
-    res.status(500).json({ error: 'Failed to retrieve offense statistics', details: err.message });
-  }
-});
-
-app.get('/api/reports/length-of-stay', async (req, res) => {
-  try {
-    const data = await queries.getPrisonerLengthOfStay();
-    res.json(data);
-  } catch (err) {
-    console.error('Error running length of stay report:', err);
-    res.status(500).json({ error: 'Failed to retrieve length of stay data', details: err.message });
-  }
-});
-
-app.get('/api/reports/behavior-ratings', async (req, res) => {
-  try {
-    const data = await queries.getBehaviorRatingDistribution();
-    res.json(data);
-  } catch (err) {
-    console.error('Error running behavior ratings report:', err);
-    res.status(500).json({ error: 'Failed to retrieve behavior rating data', details: err.message });
+    await close();
+    next();
+  } catch (error) {
+    console.error('Database cleanup error:', error);
+    next();
   }
 });
 

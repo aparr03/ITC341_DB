@@ -5,7 +5,6 @@ import './App.css';
 function App() {
   const [prisoners, setPrisoners] = useState([]);
   const [formData, setFormData] = useState({
-    id: '',
     firstName: '',
     lastName: '',
     dateOfBirth: '',
@@ -14,36 +13,122 @@ function App() {
     admissionDate: '',
     releaseDate: ''
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // This would connect to your Oracle DB in a real app
-  // For demo purposes, we'll use a mock data setup
+  // Fetch prisoners from the backend API
   useEffect(() => {
-    // Simulating data loading
-    const mockData = [
-      {
-        id: 1001,
-        firstName: 'John',
-        lastName: 'Doe',
-        dateOfBirth: '1985-06-15',
-        crime: 'Robbery',
-        sentenceYears: 5,
-        admissionDate: '2019-03-10',
-        releaseDate: '2024-03-10'
-      },
-      {
-        id: 1002,
-        firstName: 'Jane',
-        lastName: 'Smith',
-        dateOfBirth: '1990-11-22',
-        crime: 'Fraud',
-        sentenceYears: 3,
-        admissionDate: '2020-01-15',
-        releaseDate: '2023-01-15'
-      }
-    ];
-    
-    setPrisoners(mockData);
+    fetchPrisoners();
   }, []);
+
+  // Format date from API for display
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    
+    // Log the incoming date format for debugging
+    console.log('Formatting date:', dateString, typeof dateString);
+    
+    // Handle Oracle timestamp format which might come as a string
+    if (typeof dateString === 'string') {
+      // Try ISO format first (YYYY-MM-DDTHH:mm:ss.sssZ)
+      try {
+        const date = new Date(dateString);
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString();
+        }
+      } catch (e) {
+        console.log('Failed to parse as ISO date:', e);
+      }
+      
+      // Try Oracle format DD-MMM-YY
+      const oracleMatch = dateString.match(/(\d{1,2})-([A-Z]{3})-(\d{2})/i);
+      if (oracleMatch) {
+        const months = {
+          JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+          JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11
+        };
+        
+        const day = parseInt(oracleMatch[1], 10);
+        const month = months[oracleMatch[2].toUpperCase()];
+        // Add 2000 to 2-digit years for 21st century
+        const year = parseInt(oracleMatch[3], 10) + (oracleMatch[3] < 50 ? 2000 : 1900);
+        
+        const date = new Date(year, month, day);
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString();
+        }
+      }
+    }
+    
+    // If it's a Date object, simply format it
+    if (dateString instanceof Date && !isNaN(dateString.getTime())) {
+      return dateString.toLocaleDateString();
+    }
+    
+    // If we've tried everything and failed, return the original
+    console.warn('Could not format date:', dateString);
+    return String(dateString);
+  };
+
+  const fetchPrisoners = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Fetching prisoners data from API...');
+      const response = await fetch('/api/prisoners');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Raw data from API:', JSON.stringify(data, null, 2));
+      
+      if (Array.isArray(data)) {
+        console.log('Prisoner data is an array with length:', data.length);
+        
+        if (data.length > 0) {
+          console.log('First prisoner record structure:', JSON.stringify(data[0], null, 2));
+          console.log('Available columns:', Object.keys(data[0]));
+          
+          // Process data to ensure all records have required fields
+          const processedData = data.map(prisoner => {
+            // Make sure all expected fields exist, even if null
+            return {
+              PRISONER_ID: prisoner.PRISONER_ID || null,
+              FNAME: prisoner.FNAME || '',
+              LNAME: prisoner.LNAME || '',
+              DATE_OF_BIRTH: prisoner.DATE_OF_BIRTH || null,
+              OFFENSE: prisoner.OFFENSE || '',
+              SENTENCE: prisoner.SENTENCE || '',
+              ADMISSION_DATE: prisoner.ADMISSION_DATE || null,
+              RELEASE_DATE: prisoner.RELEASE_DATE || null,
+              BEHAVIOR_RATING: prisoner.BEHAVIOR_RATING || null,
+              PAROLE_STATUS: prisoner.PAROLE_STATUS || '',
+              CELLBLOCK_ID: prisoner.CELLBLOCK_ID || null,
+              CELLBLOCK_NAME: prisoner.CELLBLOCK_NAME || ''
+            };
+          });
+          
+          console.log('Processed data sample:', JSON.stringify(processedData[0], null, 2));
+          setPrisoners(processedData);
+        } else {
+          console.log('No prisoner records found in response');
+          setPrisoners([]);
+        }
+      } else {
+        console.error('API did not return an array:', data);
+        setPrisoners([]);
+      }
+    } catch (error) {
+      console.error('Error fetching prisoners:', error);
+      setError('Failed to load prisoners. Please refresh the page.');
+      setPrisoners([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -53,52 +138,76 @@ function App() {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Create a new prisoner entry
-    const newPrisoner = {
-      ...formData,
-      id: formData.id || Math.floor(1000 + Math.random() * 9000)
-    };
-    
-    // Add to state (in a real app, this would save to the database)
-    setPrisoners([...prisoners, newPrisoner]);
-    
-    // Reset form
-    setFormData({
-      id: '',
-      firstName: '',
-      lastName: '',
-      dateOfBirth: '',
-      crime: '',
-      sentenceYears: '',
-      admissionDate: '',
-      releaseDate: ''
-    });
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const requestBody = {
+        fName: formData.firstName,
+        lName: formData.lastName,
+        date_of_birth: formData.dateOfBirth,
+        offense: formData.crime,
+        sentence: `${formData.sentenceYears} years`,
+        admission_date: formData.admissionDate,
+        release_date: formData.releaseDate,
+        cellblock_id: 1, // Default to first cellblock
+        gender: 'Male', // Default value
+        behavior_rating: 3, // Default value
+        parole_status: 'Ineligible' // Default value
+      };
+      
+      console.log('Sending request:', requestBody);
+      
+      const response = await fetch('/api/prisoners', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! Status: ${response.status}, message: ${errorText}`);
+      }
+      
+      // Refresh the prisoners list
+      await fetchPrisoners();
+      
+      // Reset form
+      setFormData({
+        firstName: '',
+        lastName: '',
+        dateOfBirth: '',
+        crime: '',
+        sentenceYears: '',
+        admissionDate: '',
+        releaseDate: ''
+      });
+      
+    } catch (error) {
+      console.error('Error saving prisoner:', error);
+      setError('Failed to save prisoner. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <Container className="mt-4">
       <h1 className="text-center mb-4">Oracle Prisoner Database</h1>
       
+      {error && <div className="alert alert-danger">{error}</div>}
+      
       <Row>
         <Col md={4}>
           <Card className="mb-4">
-            <Card.Header>Add/Edit Prisoner</Card.Header>
+            <Card.Header>Add Prisoner</Card.Header>
             <Card.Body>
               <Form onSubmit={handleSubmit}>
-                <Form.Group className="mb-2">
-                  <Form.Label>ID (optional)</Form.Label>
-                  <Form.Control 
-                    type="text" 
-                    name="id" 
-                    value={formData.id} 
-                    onChange={handleInputChange}
-                    placeholder="Auto-generated if blank" 
-                  />
-                </Form.Group>
-                
                 <Form.Group className="mb-2">
                   <Form.Label>First Name</Form.Label>
                   <Form.Control 
@@ -176,8 +285,13 @@ function App() {
                   />
                 </Form.Group>
                 
-                <Button variant="primary" type="submit" className="w-100">
-                  Save Prisoner Record
+                <Button 
+                  variant="primary" 
+                  type="submit" 
+                  className="w-100" 
+                  disabled={loading}
+                >
+                  {loading ? 'Saving...' : 'Save Prisoner Record'}
                 </Button>
               </Form>
             </Card.Body>
@@ -186,10 +300,24 @@ function App() {
         
         <Col md={8}>
           <Card>
-            <Card.Header>Prisoner Records</Card.Header>
+            <Card.Header className="d-flex justify-content-between align-items-center">
+              <span>Prisoner Records ({prisoners.length})</span>
+              <Button 
+                variant="outline-primary" 
+                size="sm"
+                onClick={fetchPrisoners}
+                disabled={loading}
+              >
+                Refresh
+              </Button>
+            </Card.Header>
             <Card.Body>
-              <div className="table-responsive">
-                <Table striped bordered hover>
+              {loading ? (
+                <p className="text-center">Loading records...</p>
+              ) : prisoners.length === 0 ? (
+                <p className="text-center">No prisoners found. Add a new prisoner using the form.</p>
+              ) : (
+                <Table striped bordered hover responsive>
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -202,20 +330,33 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {prisoners.map(prisoner => (
-                      <tr key={prisoner.id}>
-                        <td>{prisoner.id}</td>
-                        <td>{prisoner.firstName} {prisoner.lastName}</td>
-                        <td>{prisoner.dateOfBirth}</td>
-                        <td>{prisoner.crime}</td>
-                        <td>{prisoner.sentenceYears} years</td>
-                        <td>{prisoner.admissionDate}</td>
-                        <td>{prisoner.releaseDate}</td>
-                      </tr>
-                    ))}
+                    {prisoners.map(prisoner => {
+                      // Add safety checks with defaults
+                      const id = prisoner.PRISONER_ID || 'Unknown';
+                      const firstName = prisoner.FNAME || '';
+                      const lastName = prisoner.LNAME || '';
+                      const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
+                      const dob = formatDate(prisoner.DATE_OF_BIRTH) || 'Unknown';
+                      const crime = prisoner.OFFENSE || 'Unknown';
+                      const sentence = prisoner.SENTENCE || 'Unknown';
+                      const admission = formatDate(prisoner.ADMISSION_DATE) || 'Unknown';
+                      const release = formatDate(prisoner.RELEASE_DATE) || 'Unknown';
+                      
+                      return (
+                        <tr key={id}>
+                          <td>{id}</td>
+                          <td>{fullName}</td>
+                          <td>{dob}</td>
+                          <td>{crime}</td>
+                          <td>{sentence}</td>
+                          <td>{admission}</td>
+                          <td>{release}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </Table>
-              </div>
+              )}
             </Card.Body>
           </Card>
         </Col>
