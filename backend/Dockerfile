@@ -2,7 +2,7 @@ FROM node:18-slim
 
 WORKDIR /app
 
-# Install Oracle Instant Client
+# Install Oracle Instant Client dependencies
 RUN apt-get update && apt-get install -y \
     libaio1 \
     wget \
@@ -15,8 +15,8 @@ RUN wget https://download.oracle.com/otn_software/linux/instantclient/instantcli
     && unzip instantclient-basiclite-linuxx64.zip \
     && rm instantclient-basiclite-linuxx64.zip \
     && cd /opt/oracle/instantclient* \
-    && ln -s libclntsh.so.21.1 libclntsh.so \
-    && ln -s libocci.so.21.1 libocci.so
+    && if [ ! -e libclntsh.so ]; then ln -s libclntsh.so.21.1 libclntsh.so; fi \
+    && if [ ! -e libocci.so ]; then ln -s libocci.so.21.1 libocci.so; fi
 
 ENV LD_LIBRARY_PATH="/opt/oracle/instantclient_21_11:${LD_LIBRARY_PATH}"
 
