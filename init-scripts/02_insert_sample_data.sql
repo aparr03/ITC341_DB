@@ -1,17 +1,11 @@
-/* ========================================================================
-   PRISON DATABASE - SAMPLE DATA INSERTION SCRIPT
-   
-   This script populates all tables with sample data for testing purposes.
-   The data follows a logical structure with related records across tables:
+/* 
+   This script populates all tables with sample data.
    - A prison facility
    - Multiple cell blocks
    - Cells within each block
    - Prisoners assigned to cell blocks
    - Parole records for eligible prisoners
-   
-   This data can be used for testing the application and demonstrating
-   database queries to supervisors.
-   ======================================================================== */
+*/
 
 -- Insert sample prison
 INSERT INTO Prison (prison_id, prison_name, location)

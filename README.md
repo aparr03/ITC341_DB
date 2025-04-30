@@ -1,16 +1,6 @@
 # Oracle Prisoner Database Application
 
-A simple React application for managing a prisoner database using Oracle DB.
-
-## Features
-
-- Display prisoner records in a tabular format
-- Add new prisoner records
-- Basic form validation
-- React Bootstrap UI components
-
 ## Prerequisites
-
 - Docker and Docker Compose installed
 - Access to Oracle Container Registry (for Oracle database image)
 
@@ -18,12 +8,13 @@ A simple React application for managing a prisoner database using Oracle DB.
 
 1. Clone this repository
 2. Make sure you have Docker and Docker Compose installed
-3. Run the application with Docker Compose:
+3. Copy .env.example to a new file named .env and fill in the required environment variables
+4. Run the application with Docker Compose:
 
 ```bash
 docker-compose up -d
 ```
-Access Localhost
+Access localhost:80
 
 ## Development
 
@@ -46,7 +37,5 @@ npm start
 The development server will be available at http://localhost:3000
 
 ## Notes
-
 - This is a demonstration application with mock data
-- In a production environment, proper security measures should be implemented
-- The Oracle database configuration requires access to the Oracle Container Registry 
+- Access/Edit SQL tables and mock data via /init-scripts/

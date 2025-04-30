@@ -28,6 +28,9 @@ const dbConfig = {
 
 console.log('Oracle connection string:', dbConfig.connectString);
 
+// Track if pool is initialized to avoid redundant initialization
+let poolInitialized = false;
+
 // Check if Oracle Instant Client is in the expected location
 function checkInstantClient() {
   if (process.platform === 'win32') {
@@ -49,6 +52,7 @@ function checkInstantClient() {
     
     // Check multiple possible locations for Oracle Instant Client on Linux
     const commonPaths = [
+      '/opt/oracle/instantclient_21_11',
       '/opt/oracle/instantclient_21_10',
       '/opt/oracle/instantclient_21_9',
       '/opt/oracle/instantclient_21_8',
@@ -63,7 +67,7 @@ function checkInstantClient() {
     ];
     
     // Log paths being checked
-    console.log('Checking paths for libclntsh.so:', pathsToCheck);
+    console.log('Checking paths for libclntsh.so:', JSON.stringify(pathsToCheck, null, 2));
     
     // Check each path for the Oracle client library
     for (const p of pathsToCheck) {
@@ -77,7 +81,8 @@ function checkInstantClient() {
     
     // Also check if libraries can be found through ldconfig
     try {
-      const ldconfigOutput = require('child_process').execSync('ldconfig -p | grep libclntsh').toString();
+      const { execSync } = require('child_process');
+      const ldconfigOutput = execSync('ldconfig -p | grep libclntsh', { encoding: 'utf8' });
       if (ldconfigOutput) {
         console.log('Oracle client found in ldconfig:', ldconfigOutput);
         return true;
@@ -96,10 +101,28 @@ function checkInstantClient() {
  */
 async function initialize() {
   try {
+    // Skip initialization if pool is already set up
+    if (poolInitialized) {
+      try {
+        // Check if pool is still accessible
+        oracledb.getPool();
+        console.log('Using existing Oracle connection pool');
+        return true;
+      } catch (err) {
+        // Pool was closed or is invalid, need to reinitialize
+        console.log('Previous pool not available, reinitializing...');
+        poolInitialized = false;
+      }
+    }
+    
     // Check for Oracle Instant Client before attempting to connect
     const clientFound = checkInstantClient();
     if (!clientFound) {
       console.warn('Oracle Instant Client libraries not found in standard locations. Connection may fail.');
+      console.warn('Node-oracledb installation instructions: https://oracle.github.io/node-oracledb/INSTALL.html');
+      console.warn('You must have 64-bit Oracle Client libraries configured with ldconfig, or in LD_LIBRARY_PATH.');
+      console.warn('If you do not have Oracle Database on this computer, then install the Instant Client Basic or Basic Light package from');
+      console.warn('https://www.oracle.com/database/technologies/instant-client/linux-x86-64-downloads.html');
     }
     
     console.log('Initializing Oracle connection pool with config:', {
@@ -113,22 +136,28 @@ async function initialize() {
       user: dbConfig.user,
       password: dbConfig.password,
       connectString: dbConfig.connectString,
-      poolIncrement: 0,
+      poolIncrement: 1,
       poolMax: 10,
       poolMin: 2,
       poolTimeout: 60
     });
     
+    poolInitialized = true;
     console.log('Oracle DB connection pool initialized successfully');
     
-    // Test the connection by making a simple query
-    const result = await execute('SELECT 1 FROM DUAL');
-    console.log('Connection test successful:', result);
+    try {
+      // Test the connection by making a simple query
+      const result = await execute('SELECT 1 FROM DUAL');
+      console.log('Connection test successful:', result);
+    } catch (testErr) {
+      console.error('Connection test failed but pool was created:', testErr);
+      // Don't throw here, as pool creation was successful
+    }
     
     return true;
   } catch (err) {
     console.error('Error initializing Oracle DB connection pool:', err);
-    console.error('Full error details:', JSON.stringify(err, null, 2));
+    poolInitialized = false;
     throw err;
   }
 }
@@ -138,9 +167,15 @@ async function initialize() {
  * This should be called when the application shuts down
  */
 async function close() {
+  if (!poolInitialized) {
+    console.log('No active Oracle DB connection pool to close');
+    return true;
+  }
+  
   try {
-    await oracledb.getPool().close(0);
+    await oracledb.getPool().close(10); // Give connections up to 10 seconds to close
     console.log('Oracle DB connection pool closed');
+    poolInitialized = false;
     return true;
   } catch (err) {
     console.error('Error closing Oracle DB connection pool:', err);
@@ -159,6 +194,11 @@ async function execute(sql, binds = {}, options = {}) {
   let connection;
   
   try {
+    // Ensure pool is initialized
+    if (!poolInitialized) {
+      await initialize();
+    }
+    
     // Default options - ensure autoCommit is always true unless explicitly set to false
     const defaultOptions = {
       outFormat: oracledb.OUT_FORMAT_OBJECT,

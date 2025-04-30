@@ -1,17 +1,13 @@
-/* ========================================================================
+/* 
    PRISON DATABASE - TABLE CREATION SCRIPT
    
-   This script creates all necessary tables for the Prison Management System 
-   according to the specified database schema. It includes:
+   This script creates all necessary tables for the Prison Management System.
    - Prison table for main facility information
    - CellBlock table for prison sections
    - Cell table for individual cells
    - Prisoner table for inmate information
    - Parole table for parole records
-   
-   Each table includes appropriate constraints, primary keys, foreign keys,
-   and data types matching the schema diagram specifications.
-   ======================================================================== */
+*/
 
 -- Drop existing tables in reverse order of dependency
 BEGIN

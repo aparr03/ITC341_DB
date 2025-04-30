@@ -68,17 +68,6 @@ app.get('/up', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Initialize database connection for each request
-app.use(async (req, res, next) => {
-  try {
-    await initialize();
-    next();
-  } catch (error) {
-    console.error('Database initialization error:', error);
-    res.status(500).json({ error: 'Database connection failed' });
-  }
-});
-
 // Prisoner routes
 app.get('/api/prisoners', async (req, res) => {
   try {
@@ -169,17 +158,6 @@ app.post('/prisoners', async (req, res) => {
   } catch (error) {
     console.error('Error creating prisoner:', error);
     res.status(500).json({ error: 'Failed to create prisoner' });
-  }
-});
-
-// Cleanup database connection after each request
-app.use(async (req, res, next) => {
-  try {
-    await close();
-    next();
-  } catch (error) {
-    console.error('Database cleanup error:', error);
-    next();
   }
 });
 
