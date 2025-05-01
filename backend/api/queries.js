@@ -1,10 +1,5 @@
 /**
  * Demonstration Queries for Prison Database
- * 
- * This module contains specialized SQL queries that provide useful insights
- * about the prison database. These queries can be used to demonstrate the
- * capabilities of the database to supervisors.
- * 
  * Each query is documented with its purpose and the expected output format.
  */
 
