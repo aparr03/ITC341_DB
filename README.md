@@ -39,3 +39,4 @@ The development server will be available at http://localhost:3000
 ## Notes
 - This is a demonstration application with mock data
 - Access/Edit SQL tables and mock data via /init-scripts/
+- Access/Edit queries at /backend/api/queries.js
