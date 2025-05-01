@@ -8,10 +8,12 @@
     "dev": "nodemon api/index.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
     "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "oracledb": "^5.5.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"
   }
-} 
+}

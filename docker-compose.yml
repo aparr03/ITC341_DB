@@ -7,41 +7,74 @@ services:
       - "80:80"
     depends_on:
       - backend
-      - oracle-db
     networks:
       - prisoner-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:80
 
   # Backend API Service
   backend:
     build:
       context: ./backend
     ports:
-      - "4000:4000"
+      - "3000:3000"
     depends_on:
-      - oracle-db
+      oracle-db:
+        condition: service_healthy
     environment:
-      - PORT=4000
+      - PORT=3000
       - DB_HOST=oracle-db
       - DB_PORT=1521
       - DB_USER=system
-      - DB_PASSWORD=YourStrongPassword123
+      - DB_PASSWORD=ITC341ProjectPassword
+      - DB_DATABASE=xepdb1
+      - NODE_ENV=development
+      - DEBUG=app:*
+      - CORS_ORIGIN=http://localhost:80
+    volumes:
+      - ./init-scripts:/app/init-scripts
+      - ./backend:/app
+      - /app/node_modules
     networks:
       - prisoner-network
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # Oracle DB - using Container Registry Oracle Database image
-  # Note: In a real project, you would need to sign up for access to the Oracle Container Registry
-  # and accept their terms and conditions
+  # Oracle DB - using publicly available Oracle XE image
   oracle-db:
-    image: container-registry.oracle.com/database/express:latest
+    image: container-registry.oracle.com/database/express:21.3.0-xe
     environment:
-      - ORACLE_PWD=YourStrongPassword123
-      - ORACLE_CHARACTERSET=AL32UTF8
+      - ORACLE_PWD=ITC341ProjectPassword
     ports:
-      - "1521:1521"
-      - "5500:5500"
+      - "1522:1521"
     volumes:
       - oracle-data:/opt/oracle/oradata
-      - ./init-scripts:/opt/oracle/scripts/setup
+      - ./init-scripts:/docker-entrypoint-initdb.d/setup
+    healthcheck:
+      test: ["CMD", "sqlplus", "-L", "system/ITC341ProjectPassword@//localhost:1521/XE", "AS", "SYSDBA", "<<< 'SELECT 1 FROM DUAL;'"]
+      interval: 60s
+      timeout: 30s
+      retries: 10
+      start_period: 180s
+    # Improve container shutdown to prevent data corruption
+    stop_grace_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - prisoner-network
 
@@ -50,4 +83,9 @@ networks:
     driver: bridge
 
 volumes:
-  oracle-data: 
+  oracle-data:
+    name: oracle-prison-data
+  oracle-setup:
+    name: oracle-prison-setup
+  oracle-startup:
+    name: oracle-prison-startup 

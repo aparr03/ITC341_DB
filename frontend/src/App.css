@@ -1,5 +1,7 @@
+/* Prison Management System UI Styles */
+
 body {
-  background-color: #f5f5f5;
+  background-color: #f8f9fa;
 }
 
 .container {
@@ -36,4 +38,105 @@ h1 {
 .btn-primary:hover {
   background-color: #23272b;
   border-color: #23272b;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  max-height: 75vh;
+}
+
+.table-sm th, .table-sm td {
+  padding: 0.5rem;
+  vertical-align: middle;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background-color: #f8f9fa;
+  z-index: 1;
+}
+
+/* Custom badge classes to replace Bootstrap 5 badges */
+.badge {
+  display: inline-block;
+  padding: 0.35em 0.65em;
+  font-size: 0.75em;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
+  border-radius: 0.25rem;
+}
+
+/* Custom badge colors for parole status */
+.badge-eligible {
+  background-color: #28a745;
+  color: white;
+}
+
+.badge-ineligible {
+  background-color: #dc3545;
+  color: white;
+}
+
+.badge-pending {
+  background-color: #ffc107;
+  color: black;
+}
+
+.badge-denied {
+  background-color: #6c757d;
+  color: white;
+}
+
+.badge-approved {
+  background-color: #007bff;
+  color: white;
+}
+
+/* Behavior rating colors */
+.rating-1 {
+  color: #dc3545;
+}
+
+.rating-2 {
+  color: #fd7e14;
+}
+
+.rating-3 {
+  color: #ffc107;
+}
+
+.rating-4 {
+  color: #28a745;
+}
+
+.rating-5 {
+  color: #007bff;
+}
+
+/* SQL query section */
+.sql-query-container {
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+code {
+  font-size: 0.9rem;
+  background-color: #f1f1f1;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.gap-2 {
+  gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .container-fluid {
+    padding-left: 5px;
+    padding-right: 5px;
+  }
 } 
