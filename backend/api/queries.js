@@ -218,10 +218,45 @@ async function getBehaviorRatingDistribution() {
   }
 }
 
+/**
+ * Query 6: Get offense percentage distribution
+ * 
+ * Purpose: Shows detailed percentage breakdown of all offenses in the prison
+ * 
+ * @returns {Promise<Array>} Array with offense percentage distribution
+ */
+async function getOffensePercentageDistribution() {
+  const sql = `
+    SELECT 
+      offense,
+      COUNT(*) as count,
+      ROUND((COUNT(*) / (SELECT COUNT(*) FROM Prisoner)) * 100, 2) AS percentage
+    FROM 
+      Prisoner
+    GROUP BY 
+      offense
+    ORDER BY 
+      percentage DESC
+  `;
+  
+  try {
+    const result = await db.execute(sql);
+    return result.rows.map(row => ({
+      offense: row.OFFENSE,
+      count: row.COUNT,
+      percentage: row.PERCENTAGE
+    }));
+  } catch (err) {
+    console.error('Error in getOffensePercentageDistribution:', err);
+    throw err;
+  }
+}
+
 module.exports = {
   getOccupancyByBlock,
   getUpcomingParoleEligibility,
   getOffenseStatistics,
   getPrisonerLengthOfStay,
-  getBehaviorRatingDistribution
+  getBehaviorRatingDistribution,
+  getOffensePercentageDistribution
 };

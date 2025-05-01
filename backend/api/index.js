@@ -11,6 +11,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const { initialize, close } = require('./db');
 const PrisonerService = require('./prisonerService');
+const Queries = require('./queries');
 
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -162,4 +163,65 @@ app.post('/prisoners', async (req, res) => {
 });
 
 // Initialize the application
-initializeApp(); 
+initializeApp();
+
+// Add demonstration query endpoints
+app.get('/api/demo/occupancy', async (req, res) => {
+  try {
+    const data = await Queries.getOccupancyByBlock();
+    res.json(data);
+  } catch (error) {
+    console.error('Error getting occupancy data:', error);
+    res.status(500).json({ error: 'Failed to get occupancy data' });
+  }
+});
+
+app.get('/api/demo/parole', async (req, res) => {
+  try {
+    const data = await Queries.getUpcomingParoleEligibility();
+    res.json(data);
+  } catch (error) {
+    console.error('Error getting parole data:', error);
+    res.status(500).json({ error: 'Failed to get parole data' });
+  }
+});
+
+app.get('/api/demo/offenses', async (req, res) => {
+  try {
+    const data = await Queries.getOffenseStatistics();
+    res.json(data);
+  } catch (error) {
+    console.error('Error getting offense data:', error);
+    res.status(500).json({ error: 'Failed to get offense data' });
+  }
+});
+
+app.get('/api/demo/length-of-stay', async (req, res) => {
+  try {
+    const data = await Queries.getPrisonerLengthOfStay();
+    res.json(data);
+  } catch (error) {
+    console.error('Error getting length of stay data:', error);
+    res.status(500).json({ error: 'Failed to get length of stay data' });
+  }
+});
+
+app.get('/api/demo/behavior', async (req, res) => {
+  try {
+    const data = await Queries.getBehaviorRatingDistribution();
+    res.json(data);
+  } catch (error) {
+    console.error('Error getting behavior data:', error);
+    res.status(500).json({ error: 'Failed to get behavior data' });
+  }
+});
+
+app.get('/api/demo/offense-percentages', async (req, res) => {
+  try {
+    const data = await Queries.getOffensePercentageDistribution();
+    res.json(data);
+  } catch (error) {
+    console.error('Error getting offense percentage data:', error);
+    res.status(500).json({ error: 'Failed to get offense percentage data' });
+  }
+}); 
